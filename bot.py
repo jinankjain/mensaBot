@@ -15,7 +15,7 @@ ETH_MENSA_NOMEAL_STR = 'No lunch menu today.'
 FDATE = '{}.{}.{}'.format(now.day, now.strftime("%m"), now.year)
 
 def parse_eth_menu():
-    r = requests.get("https://www.ethz.ch/en/campus/gastronomie/menueplaene/offerDay.html?language=en&id=12&date={}-{}-{}".format(now.year, now.strftime("%m"), now.day -1))
+    r = requests.get("https://www.ethz.ch/en/campus/gastronomie/menueplaene/offerDay.html?language=en&id=12&date={}-{}-{}".format(now.year, now.strftime("%m"), now.day))
 
     if ETH_MENSA_NOMEAL_STR in r.text:
         return "No ETH menu available for this day!"
