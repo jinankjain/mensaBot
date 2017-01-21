@@ -45,7 +45,7 @@ def parse_eth_menu():
 
 def parse_uzh_menu():
     locale.setlocale(locale.LC_ALL, 'de_CH.utf-8')
-    curr_day = str(calendar.day_name[index-1]).lower()
+    curr_day = str(calendar.day_name[index]).lower()
 
     menu = ""
     menu += "*Cheap mensa:* \n \n"
