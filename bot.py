@@ -24,11 +24,11 @@ def parse_eth_menu(lunch_or_dinner):
 
     soup = BeautifulSoup(r.text, 'html.parser')
     table = soup.findAll('table')
-
-    menu = "*Expensive mensa:* \n \n"
+    menu = ""
+    menu += "*Expensive mensa:* \n \n"
     if lunch_or_dinner == 1:
         menu += "*Lunch:* \n"
-        for row in t[0].findAll('tr')[0:]:
+        for row in table[0].findAll('tr')[0:]:
             col = row.findAll('td')
             j = 0
             for c in col:
@@ -39,7 +39,7 @@ def parse_eth_menu(lunch_or_dinner):
         menu+="\n"
     else:
         menu += "*Dinner:* \n"
-        for row in t[1].findAll('tr')[0:]:
+        for row in table[1].findAll('tr')[0:]:
             col = row.findAll('td')
             j = 0
             for c in col:
@@ -49,15 +49,16 @@ def parse_eth_menu(lunch_or_dinner):
                 j+=1
         menu+="\n"
 
+    return menu
 
 def parse_uzh_menu(lunch_or_dinner):
     locale.setlocale(locale.LC_ALL, 'de_CH.utf-8')
     curr_day = str(calendar.day_name[index]).lower()
 
     menu = ""
-    menu += "*Cheap mensa:* \n \n"
+    menu += "*Cheap mensa:*" + "\n\n"
     if lunch_or_dinner == 1:
-        menu += "*Lunch:* \n"
+        menu += "*Lunch:*" + "\n"
         r = requests.get("http://www.mensa.uzh.ch/de/menueplaene/zentrum-mensa/{}.html".format(curr_day))
 
         if not FDATE in r.text:
@@ -95,11 +96,11 @@ def parse_uzh_menu(lunch_or_dinner):
 
 # lunch_or_dinner = 1 -> Lunch else Dinner
 def corn_job(lunch_or_dinner):
-    print(lunch_or_dinner)
     eth_menu = parse_eth_menu(lunch_or_dinner)
     uzh_menu = parse_uzh_menu(lunch_or_dinner)
-    print(eth_menu + "\n" + uzh_menu)
-    menu = eth_menu + "\n\n" + uzh_menu
+    menu = ""
+    menu += eth_menu
+    menu += uzh_menu
     slack_data = {'channel':'#vippartyroom', 'username': 'mensamenu', 'text': menu}
     url = 'https://hooks.slack.com/services/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'
     r = requests.post(url, data = json.dumps(slack_data))
@@ -121,3 +122,4 @@ else:
     sched.add_job(corn_job, 'date', run_date=datetime.datetime(int(now.year), int(now.strftime("%m")), int(now.day), 11, 00, 0), args=[1])
 
 sched.start()
+
