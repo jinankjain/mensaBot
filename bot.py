@@ -100,10 +100,10 @@ def corn_job(lunch_or_dinner):
     uzh_menu = parse_uzh_menu(lunch_or_dinner)
     print(eth_menu + "\n" + uzh_menu)
     menu = eth_menu + "\n\n" + uzh_menu
-    # slack_data = {'channel':'#vippartyroom', 'username': 'mensamenu', 'text': menu}
-    # url = 'https://hooks.slack.com/services/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'
-    # r = requests.post(url, data = json.dumps(slack_data))
-    # print(r.text)
+    slack_data = {'channel':'#vippartyroom', 'username': 'mensamenu', 'text': menu}
+    url = 'https://hooks.slack.com/services/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'
+    r = requests.post(url, data = json.dumps(slack_data))
+    print(r.text)
     if lunch_or_dinner == 0:
         sched.add_job(corn_job, 'date', run_date=datetime.datetime(int(now.year), int(now.strftime("%m")), int(now.day), 11, 00, 0)+datetime.timedelta(days=1), args=[1])
     else:
