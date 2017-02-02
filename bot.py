@@ -112,8 +112,6 @@ def corn_job(lunch_or_dinner):
     else:
         sched.add_job(corn_job, 'date', run_date=datetime.datetime(int(now.year), int(now.strftime("%m")), int(now.day), 17, 00, 0), args=[0])
 
-
-'''
 today11am = now.replace(hour=11, minute=0, second=0, microsecond=0)
 today5pm = now.replace(hour=17, minute=0, second=0, microsecond=0)
 today12am = now.replace(hour=23, minute=59, second=59, microsecond=59)
@@ -126,4 +124,3 @@ else:
     sched.add_job(corn_job, 'date', run_date=datetime.datetime(int(now.year), int(now.strftime("%m")), int(now.day), 11, 00, 0), args=[1])
 
 sched.start()
-'''
