@@ -1,5 +1,6 @@
+#!/usr/bin/python3
+
 from bs4 import BeautifulSoup
-from apscheduler.schedulers.blocking import BlockingScheduler
 import requests
 import json
 import locale
@@ -8,13 +9,28 @@ import datetime
 import time
 import pytz
 
-sched = BlockingScheduler()
-tz = pytz.timezone('Europe/Zurich')
-now = datetime.datetime.now(tz)
+# 1 is lunch, 0 is dinner
+now = datetime.datetime.now(pytz.timezone('Europe/Zurich'))
 index = (int(now.strftime("%w"))+6)%7
+hour = now.strftime("%H")
 
 ETH_MENSA_NOMEAL_STR = 'No lunch menu today.'
 FDATE = '{}.{}.{}'.format(now.day, now.strftime("%m"), now.year)
+
+def eth_parse_table(table):
+    menu = ""
+    for row in table[0].findAll('tr')[0:]:
+        col = row.findAll('td')
+        j = 0
+        for c in col:
+            if(j == 0 or j == 1):
+                for b in c.findAll("br"):
+                    b.replaceWith(" ")
+                menu += c.text.replace("Show details", "")
+                menu += "\n"
+            j += 1
+    return menu + "\n"
+    
 
 def parse_eth_menu(lunch_or_dinner):
     r = requests.get("https://www.ethz.ch/en/campus/gastronomie/menueplaene/offerDay.html?language=en&id=12&date={}-{}-{}".format(now.year, now.strftime("%m"), now.strftime("%d")))
@@ -27,29 +43,10 @@ def parse_eth_menu(lunch_or_dinner):
     menu += "*Expensive mensa:* \n \n"
     if lunch_or_dinner == 1:
         menu += "*Lunch:* \n"
-        for row in table[0].findAll('tr')[0:]:
-            col = row.findAll('td')
-            j = 0
-            for c in col:
-                if(j == 0 or j == 1):
-                    for b in c.findAll("br"):
-                        b.replaceWith(" ")
-                    print(c.text)
-                    menu+=c.text.replace("Show details", "")
-                    menu+="\n"
-                j+=1
-        menu+="\n"
     else:
         menu += "*Dinner:* \n"
-        for row in table[1].findAll('tr')[0:]:
-            col = row.findAll('td')
-            j = 0
-            for c in col:
-                if(j == 0 or j == 1):
-                    menu+=c.text
-                    menu+="\n"
-                j+=1
-        menu+="\n"
+
+    menu += eth_parse_table(table)
 
     return menu
 
@@ -96,31 +93,23 @@ def parse_uzh_menu(lunch_or_dinner):
 
     return menu
 
-# lunch_or_dinner = 1 -> Lunch else Dinner
-def corn_job(lunch_or_dinner):
-    eth_menu = parse_eth_menu(lunch_or_dinner)
-    uzh_menu = parse_uzh_menu(lunch_or_dinner)
+def main():
+    if int(hour) > 12:
+        lunch_or_dinner = 0
+    else:
+        lunch_or_dinner = 1
+
     menu = ""
-    menu += eth_menu
-    menu += uzh_menu
+    menu += parse_eth_menu(lunch_or_dinner)
+    menu += parse_uzh_menu(lunch_or_dinner)
+    
+    print(menu)
+    return
+
     slack_data = {'channel':'#vippartyroom', 'username': 'mensamenu', 'text': menu}
     url = 'https://hooks.slack.com/services/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'
     r = requests.post(url, data = json.dumps(slack_data))
-    print(r.text)
-    if lunch_or_dinner == 0:
-        sched.add_job(corn_job, 'date', run_date=datetime.datetime(int(now.year), int(now.strftime("%m")), int(now.day), 11, 00, 0)+datetime.timedelta(days=1), args=[1])
-    else:
-        sched.add_job(corn_job, 'date', run_date=datetime.datetime(int(now.year), int(now.strftime("%m")), int(now.day), 17, 00, 0), args=[0])
 
-today11am = now.replace(hour=11, minute=0, second=0, microsecond=0)
-today5pm = now.replace(hour=17, minute=0, second=0, microsecond=0)
-today12am = now.replace(hour=23, minute=59, second=59, microsecond=59)
+if __name__ == "__main__":
+    main()
 
-if now > today11am and now < today5pm:
-    sched.add_job(corn_job, 'date', run_date=datetime.datetime(int(now.year), int(now.strftime("%m")), int(now.day), 17, 00, 0), args=[0])
-elif now > today5pm and now < today12am:
-    sched.add_job(corn_job, 'date', run_date=datetime.datetime(int(now.year), int(now.strftime("%m")), int(now.day), 11, 00, 0)+datetime.timedelta(days=1), args=[1])
-else:
-    sched.add_job(corn_job, 'date', run_date=datetime.datetime(int(now.year), int(now.strftime("%m")), int(now.day), 11, 00, 0), args=[1])
-
-sched.start()
