@@ -103,9 +103,6 @@ def main():
     menu += parse_eth_menu(lunch_or_dinner)
     menu += parse_uzh_menu(lunch_or_dinner)
     
-    print(menu)
-    return
-
     slack_data = {'channel':'#vippartyroom', 'username': 'mensamenu', 'text': menu}
     url = 'https://hooks.slack.com/services/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'
     r = requests.post(url, data = json.dumps(slack_data))
