@@ -1,126 +1,90 @@
+#!/usr/bin/python3
+
 from bs4 import BeautifulSoup
-from apscheduler.schedulers.blocking import BlockingScheduler
 import requests
 import json
 import locale
 import calendar
 import datetime
-import time
 import pytz
 
-sched = BlockingScheduler()
-tz = pytz.timezone('Europe/Zurich')
-now = datetime.datetime.now(tz)
-index = (int(now.strftime("%w"))+6)%7
+DEBUG = False
+NOW = datetime.datetime.now(pytz.timezone("Europe/Zurich"))
+ETH_MENSA_NOMEAL_STR = "No lunch menu today."
+UZH_MENSA_NOMEAL_STR = "{}.{}.{}".format(NOW.day, NOW.strftime("%m"), NOW.year)
 
-ETH_MENSA_NOMEAL_STR = 'No lunch menu today.'
-FDATE = '{}.{}.{}'.format(now.day, now.strftime("%m"), now.year)
+def eth_parse_table(table):
+    menu = ""
+    for row in table[int(not is_lunchtime())].findAll("tr", attrs={"class": None})[0:]:
+        cols = row.findAll("td")
+        if len(cols) > 1:
+            # first comes the header
+            menu += "*" + remove_line_breaks(cols[0]).text.title() + "*\n"
+            # next the dish
+            menu += remove_line_breaks(cols[1]).text.replace("Show details", "") + "\n\n"
+    return menu
 
-def parse_eth_menu(lunch_or_dinner):
-    r = requests.get("https://www.ethz.ch/en/campus/gastronomie/menueplaene/offerDay.html?language=en&id=12&date={}-{}-{}".format(now.year, now.strftime("%m"), now.strftime("%d")))
+def uzh_parse_table(table):
+    menu = ""
+    for m in table:
+        heading = m.findAll("div")[0].findAll("h3")[0:-1]
+        para = m.findAll("div")[0].findAll("p")
+        for i, h in enumerate(heading):
+            menu += "*" + h.text.split("|")[0].strip().title() + "*\n"
+            menu += " ".join(para[i].text.split()).strip() + "\n\n"
+    return menu
+
+def get_eth_menu():
+    r = requests.get("https://www.ethz.ch/en/campus/gastronomie/menueplaene/offerDay.html?language=en&id=12&date={}-{}-{}".format(NOW.year, NOW.strftime("%m"), NOW.strftime("%d")))
+    
     if ETH_MENSA_NOMEAL_STR in r.text:
         return "No ETH menu available for this day!"
 
-    soup = BeautifulSoup(r.text, 'html.parser')
-    table = soup.findAll('table')
-    menu = ""
-    menu += "*Expensive mensa:* \n \n"
-    if lunch_or_dinner == 1:
-        menu += "*Lunch:* \n"
-        for row in table[0].findAll('tr')[0:]:
-            col = row.findAll('td')
-            j = 0
-            for c in col:
-                if(j == 0 or j == 1):
-                    for b in c.findAll("br"):
-                        b.replaceWith(" ")
-                    print(c.text)
-                    menu+=c.text.replace("Show details", "")
-                    menu+="\n"
-                j+=1
-        menu+="\n"
+    table = BeautifulSoup(r.text, "html.parser").findAll("table")
+
+    return "*Polymensa:*\n\n" + eth_parse_table(table)
+
+def get_uzh_menu():
+    # UZH URL actually has the weekday in german
+    locale.setlocale(locale.LC_ALL, "de_CH.utf-8")
+    curr_day = str(calendar.day_name[(int(NOW.strftime("%w"))+6)%7]).lower()
+
+    if is_lunchtime():
+        url = "http://www.mensa.uzh.ch/de/menueplaene/zentrum-mensa/{}.html"
     else:
-        menu += "*Dinner:* \n"
-        for row in table[1].findAll('tr')[0:]:
-            col = row.findAll('td')
-            j = 0
-            for c in col:
-                if(j == 0 or j == 1):
-                    menu+=c.text
-                    menu+="\n"
-                j+=1
-        menu+="\n"
+        url = "http://www.mensa.uzh.ch/de/menueplaene/zentrum-mercato-abend/{}.html"
+    r = requests.get(url.format(curr_day))
+    
+    if not UZH_MENSA_NOMEAL_STR in r.text:
+        return "No UZH menu available for this day!"
+    
+    menu_div = BeautifulSoup(r.text, "html.parser").findAll("div", { "class" : "text-basics" })
+    menu_div.pop(0)
+        
+    return "*Cheap mensa:*\n\n" + uzh_parse_table(menu_div)
 
-    return menu
+def is_lunchtime():
+    return int(NOW.strftime("%H")) < 14
 
-def parse_uzh_menu(lunch_or_dinner):
-    locale.setlocale(locale.LC_ALL, 'de_CH.utf-8')
-    curr_day = str(calendar.day_name[index]).lower()
+def remove_line_breaks(element):
+    for b in element.findAll("br"):
+        b.replaceWith(" ")
+    return element
 
-    menu = ""
-    menu += "*Cheap mensa:*" + "\n\n"
-    if lunch_or_dinner == 1:
-        menu += "*Lunch:*" + "\n"
-        r = requests.get("http://www.mensa.uzh.ch/de/menueplaene/zentrum-mensa/{}.html".format(curr_day))
+def slack_say(message):
+    slack_data = {"channel":"#vippartyroom", "username": "mensamenu", "text": message}
+    url = "https://hooks.slack.com/services/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"
+    r = requests.post(url, data=json.dumps(slack_data))
 
-        if not FDATE in r.text:
-            return "No UZH menu available for this day!"
+def main():
+    menu = "\n" + get_eth_menu() + get_uzh_menu()
+    
+    if DEBUG:
+        print(menu.rstrip())
+        return
 
-        soup = BeautifulSoup(r.text, 'html.parser')
-        menu_div = soup.findAll("div", { "class" : "text-basics" })
-        menu_div.pop(0)
+    slack_say(menu.rstrip()) 
 
-        for m in menu_div:
-            heading =  m.findAll('div')[0].findAll('h3')
-            para = m.findAll('div')[0].findAll('p')
-            for i in range(0, len(heading)-1):
-                menu+=str(heading[i].text).split("|")[0]
-                menu+="\n"
-                menu+=str(para[i].text)
-                menu+="\n"
-    else:
-        menu += "\n*Dinner:* \n"
-        r = requests.get("http://www.mensa.uzh.ch/de/menueplaene/zentrum-mercato-abend/{}.html".format(curr_day))
-        soup = BeautifulSoup(r.text, 'html.parser')
-        menu_div = soup.findAll("div", { "class" : "text-basics" })
-        menu_div.pop(0)
+if __name__ == "__main__":
+    main()
 
-        for m in menu_div:
-            heading =  m.findAll('div')[0].findAll('h3')
-            para = m.findAll('div')[0].findAll('p')
-            for i in range(0, len(heading)-1):
-                menu+=str(heading[i].text).split("|")[0]
-                menu+="\n"
-                menu+=str(para[i].text)
-                menu+="\n"
-
-    return menu
-
-# lunch_or_dinner = 1 -> Lunch else Dinner
-def corn_job(lunch_or_dinner):
-    eth_menu = parse_eth_menu(lunch_or_dinner)
-    uzh_menu = parse_uzh_menu(lunch_or_dinner)
-    menu = ""
-    menu += eth_menu
-    menu += uzh_menu
-    slack_data = {'channel':'#vippartyroom', 'username': 'mensamenu', 'text': menu}
-    url = 'https://hooks.slack.com/services/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'
-    r = requests.post(url, data = json.dumps(slack_data))
-    print(r.text)
-    if lunch_or_dinner == 0:
-        sched.add_job(corn_job, 'date', run_date=datetime.datetime(int(now.year), int(now.strftime("%m")), int(now.day), 11, 00, 0)+datetime.timedelta(days=1), args=[1])
-    else:
-        sched.add_job(corn_job, 'date', run_date=datetime.datetime(int(now.year), int(now.strftime("%m")), int(now.day), 17, 00, 0), args=[0])
-
-today11am = now.replace(hour=11, minute=0, second=0, microsecond=0)
-today5pm = now.replace(hour=17, minute=0, second=0, microsecond=0)
-today12am = now.replace(hour=23, minute=59, second=59, microsecond=59)
-
-if now > today11am and now < today5pm:
-    sched.add_job(corn_job, 'date', run_date=datetime.datetime(int(now.year), int(now.strftime("%m")), int(now.day), 17, 00, 0), args=[0])
-elif now > today5pm and now < today12am:
-    sched.add_job(corn_job, 'date', run_date=datetime.datetime(int(now.year), int(now.strftime("%m")), int(now.day), 11, 00, 0)+datetime.timedelta(days=1), args=[1])
-else:
-    sched.add_job(corn_job, 'date', run_date=datetime.datetime(int(now.year), int(now.strftime("%m")), int(now.day), 11, 00, 0), args=[1])
-
-sched.start()
